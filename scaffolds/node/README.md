@@ -9,3 +9,4 @@ Expected pieces:
 - `metrics-server.mjs.tmpl`
 
 The generated project should prefer a local `metricsUrl` over process guessing.
+Use `projectStartCommand`, `projectStopCommand`, and `projectStatusCommand` as the command inputs for the shell templates.

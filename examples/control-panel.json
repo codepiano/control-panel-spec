@@ -1,0 +1,22 @@
+{
+  "id": "example-project",
+  "name": "Example Project",
+  "workingDirectory": ".",
+  "startCommand": "./scripts/start.sh",
+  "stopCommand": "./scripts/stop.sh",
+  "statusCommand": "./scripts/status.sh",
+  "restartCommand": "./scripts/restart.sh",
+  "openHomepageCommand": "./scripts/open-homepage.sh",
+  "scripts": {
+    "start": "./scripts/start.sh",
+    "stop": "./scripts/stop.sh",
+    "status": "./scripts/status.sh",
+    "restart": "./scripts/restart.sh",
+    "openHomepage": "./scripts/open-homepage.sh"
+  },
+  "frontendUrl": "http://127.0.0.1:3000",
+  "homepageUrl": "https://github.com/codepiano/project-tooling",
+  "metricsUrl": "http://127.0.0.1:4100/control-panel/metrics",
+  "notes": "Project-owned scripts and metrics are preferred over inferred host state.",
+  "specUrl": "https://github.com/codepiano/project-tooling/blob/main/spec/PROJECT_TOOLING_SPEC.md"
+}

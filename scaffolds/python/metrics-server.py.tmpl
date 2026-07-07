@@ -2,15 +2,35 @@ from __future__ import annotations
 
 import json
 import os
+import time
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
+STARTED_AT = time.time()
+
+
 def metrics() -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "status": "running",
-        "updatedAt": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        "updatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "pid": os.getpid(),
+        "uptimeSec": int(time.time() - STARTED_AT),
+        "cpu": {
+            "percent": 0,
+        },
+        "processes": [
+            {
+                "pid": os.getpid(),
+                "cpu": {
+                    "percent": 0,
+                },
+            }
+        ],
     }
+
+    # Add memory fields when the runtime can measure them accurately.
+    return payload
 
 
 class Handler(BaseHTTPRequestHandler):

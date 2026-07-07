@@ -9,3 +9,4 @@ Expected pieces:
 - `metrics-server.py.tmpl`
 
 Prefer `python3` and keep the endpoint small and explicit.
+Use `projectStartCommand`, `projectStopCommand`, and `projectStatusCommand` as the command inputs for the shell templates.

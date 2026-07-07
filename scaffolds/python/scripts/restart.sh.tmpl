@@ -2,4 +2,5 @@
 set -euo pipefail
 
 cd "{{workingDirectory}}"
-{{restartCommand}}
+{{projectStopCommand}}
+exec {{projectStartCommand}}

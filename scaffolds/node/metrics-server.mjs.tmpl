@@ -1,17 +1,33 @@
 import http from 'node:http';
+import { uptime } from 'node:process';
 
 const port = Number(process.env.PORT || 0);
 
 function metrics() {
+  const memory = process.memoryUsage();
+
   return {
     status: 'running',
     updatedAt: new Date().toISOString(),
     pid: process.pid,
+    uptimeSec: Math.floor(uptime()),
     memory: {
-      rssBytes: process.memoryUsage().rss,
-      heapUsedBytes: process.memoryUsage().heapUsed,
-      heapTotalBytes: process.memoryUsage().heapTotal
-    }
+      rssBytes: memory.rss,
+      heapUsedBytes: memory.heapUsed,
+      heapTotalBytes: memory.heapTotal
+    },
+    cpu: {
+      percent: 0
+    },
+    processes: [
+      {
+        pid: process.pid,
+        rssBytes: memory.rss,
+        cpu: {
+          percent: 0
+        }
+      }
+    ]
   };
 }
 

@@ -9,3 +9,5 @@ It is intentionally language-neutral:
 - `examples/` contains sample payloads and manifests
 
 The goal is to keep the contract stable while letting each language add its own scaffold over time.
+
+Current scaffold families include `node/`, `python/`, `go/`, and `rust/`, all following the same contract shape.
