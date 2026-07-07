@@ -8,7 +8,7 @@ The design goals are:
 
 - One manifest format for discovery and control
 - One metrics contract for runtime status and resource usage
-- One scaffold repository that can grow to support multiple languages
+- One Node.js scaffold repository that stays small and reusable
 
 ## 1. Scope
 
@@ -17,7 +17,7 @@ This spec covers:
 - Discovering project roots from `control-panel.json`
 - Generating start, stop, status, restart, homepage, and metrics integrations
 - Exposing runtime status through a standard HTTP endpoint
-- Supporting multiple scaffold families under one repository
+- Supporting the Node.js scaffold under one repository
 
 This spec does not cover:
 
@@ -36,20 +36,17 @@ project-tooling/
     PROJECT_TOOLING_SPEC.md
   scaffolds/
     node/
-    python/
-    go/
-    rust/
   examples/
 ```
 
 The `examples/` directory may include both metrics payload examples and a reference `control-panel.json` manifest.
 
-Language-specific scaffolds may add more folders, but they should preserve the same conceptual shape:
+The repository currently ships only the Node.js scaffold. If additional runtimes are added later, they should preserve the same conceptual shape:
 
 - `control-panel.json`
 - `scripts/`
 - `metrics` endpoint or adapter
-- runtime-specific support files such as `package.json`, `pyproject.toml`, `go.mod`, or `Cargo.toml`
+- Node.js support files such as `package.json`, `tsconfig.json`, or framework-specific config when needed
 
 ## 3. Project Manifest
 
@@ -71,6 +68,7 @@ Every controllable project should expose a `control-panel.json` file at the proj
 - `frontendUrl`: canonical local or deployed frontend URL
 - `homepageUrl`: project homepage or repo URL fallback
 - `metricsUrl`: HTTP endpoint that returns runtime metrics JSON
+- `databasePath`: path to the project-owned SQLite database file when the project uses SQLite
 - `notes`: short operator note
 - `specUrl`: link to the project's own spec if it has one
 - `scripts`: optional object mapping lifecycle names to relative script paths
@@ -220,42 +218,26 @@ Prefer bytes in the contract and let the consumer decide how to render units. If
 - If the runtime only knows process-local CPU and not system-wide CPU, that is acceptable as long as the field meaning is stable within the project
 - Do not synthesize CPU usage from shell wrappers or host heuristics
 
-## 6. Language Guidance
-
-### 6.1 Node.js
+## 6. Node.js Guidance
 
 - Use `node`, `npm`, `pnpm`, or `corepack` only if the repository already uses them
-- If the app already exposes an HTTP server, add the metrics endpoint there
-- If it is a desktop shell, keep the launcher and the runtime service separate when possible
-
-### 6.2 Python
-
-- Prefer `python3`
-- Keep the HTTP metrics endpoint in the same process as the app when practical
-- Avoid assuming a global virtualenv
-
-### 6.3 Go
-
-- Prefer a small HTTP server embedded in the binary
-- Expose process metrics from the running service, not from the shell wrapper
-
-### 6.4 Rust
-
-- Prefer a lightweight in-process metrics route
-- Keep JSON field names stable and explicit
+- Keep the frontend and backend separated when the product has both a UI and an API
+- Put the frontend under `frontend/` and the backend under `backend/`
+- Keep SQLite data, migrations, and seeds under `db/`
+- Add the metrics endpoint to the backend service when the app already exposes HTTP
+- If the app is a desktop shell, keep the launcher and the runtime service separate when possible
+- Use `databasePath` to point at the project-owned SQLite file when the project uses SQLite
 
 ## 7. Scaffold Policy
 
-Each scaffold family should include:
+The Node scaffold should include:
 
 - A manifest template
 - Lifecycle script templates
 - A metrics adapter or example service
-- A README explaining the conventions for that language
+- A README explaining the common project layout and runtime-specific inputs
 
-The scaffold repository should grow by adding new language folders rather than changing the contract for existing ones.
-
-Each scaffold family should keep its output shape aligned:
+The scaffold should keep its output shape aligned:
 
 - `control-panel.json`
 - `scripts/start.sh`
@@ -264,6 +246,8 @@ Each scaffold family should keep its output shape aligned:
 - `scripts/restart.sh`
 - `scripts/open-homepage.sh`
 - a metrics server or adapter that serves `GET /control-panel/metrics`
+
+For Node projects that separate frontend and backend, `frontendUrl` should point at the frontend surface and the metrics endpoint should live with the backend.
 
 ## 8. Output Contract
 

@@ -17,6 +17,7 @@
   "frontendUrl": "http://127.0.0.1:3000",
   "homepageUrl": "https://github.com/codepiano/project-tooling",
   "metricsUrl": "http://127.0.0.1:4100/control-panel/metrics",
+  "databasePath": "db/app.sqlite",
   "notes": "Project-owned scripts and metrics are preferred over inferred host state.",
   "specUrl": "https://github.com/codepiano/project-tooling/blob/main/spec/PROJECT_TOOLING_SPEC.md"
 }
