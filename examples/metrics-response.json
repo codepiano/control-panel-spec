@@ -1,0 +1,11 @@
+{
+  "status": "running",
+  "pid": 12345,
+  "updatedAt": "2026-07-08T09:00:00.000Z",
+  "uptimeSec": 120,
+  "memory": {
+    "rssBytes": 123456789,
+    "heapUsedBytes": 45678901,
+    "heapTotalBytes": 67890123
+  }
+}
