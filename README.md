@@ -1,6 +1,6 @@
-# Control Panel Tooling
+# Project Tooling
 
-This repository holds the canonical spec and scaffold templates for projects managed by Control Panel.
+This repository holds the canonical spec and scaffold templates for projects that want a standard control surface, lifecycle scripts, and runtime metrics.
 
 It is intentionally language-neutral:
 

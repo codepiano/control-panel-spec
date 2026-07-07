@@ -1,8 +1,8 @@
-# Project Control Spec
+# Project Tooling Spec
 
 Version: `1.0`
 
-This document is the canonical contract for projects that want to integrate with Control Panel and for AIs that generate project lifecycle scripts.
+This document is the canonical contract for projects that want a standard control surface and for AIs that generate project lifecycle scripts.
 
 The design goals are:
 
@@ -31,9 +31,9 @@ This spec does not cover:
 Recommended top-level layout:
 
 ```text
-project-control-tooling/
+project-tooling/
   spec/
-    PROJECT_CONTROL_SPEC.md
+    PROJECT_TOOLING_SPEC.md
   scaffolds/
     node/
     python/
