@@ -1,6 +1,6 @@
 # Project Tooling Spec
 
-Version: `1.0`
+Version: `1.1`
 
 This document is the canonical contract for projects that want a standard control surface and for AIs that generate project lifecycle scripts.
 
@@ -15,7 +15,7 @@ The design goals are:
 This spec covers:
 
 - Discovering project roots from `control-panel.json`
-- Generating start, stop, status, restart, homepage, and metrics integrations
+- Generating init, install, start, stop, status, restart, homepage, and metrics integrations
 - Exposing runtime status through a standard HTTP endpoint
 - Supporting the Node.js scaffold under one repository
 
@@ -61,7 +61,10 @@ Every controllable project should expose a `control-panel.json` file at the proj
 
 - `id`: stable identifier
 - `startCommand`: lifecycle start command
+- `installCommand`: lifecycle install command
+- `initCommand`: lifecycle initialization command
 - `stopCommand`: lifecycle stop command
+- `uninstallCommand`: lifecycle uninstall command
 - `statusCommand`: lifecycle status command
 - `restartCommand`: lifecycle restart command
 - `openHomepageCommand`: command that opens the project homepage
@@ -72,7 +75,7 @@ Every controllable project should expose a `control-panel.json` file at the proj
 - `notes`: short operator note
 - `specUrl`: link to the project's own spec if it has one
 - `scripts`: optional object mapping lifecycle names to relative script paths
-- `scripts.start`, `scripts.stop`, `scripts.status`, `scripts.restart`, `scripts.openHomepage`: recommended script keys
+- `scripts.init`, `scripts.install`, `scripts.start`, `scripts.stop`, `scripts.status`, `scripts.restart`, `scripts.uninstall`, `scripts.openHomepage`: recommended script keys
 
 ### 3.3 Resolution order
 
@@ -80,10 +83,13 @@ When both direct commands and script paths are present, prefer the project-autho
 
 Recommended precedence:
 
+- `scripts.init` before `initCommand`
+- `scripts.install` before `installCommand`
 - `scripts.start` before `startCommand`
 - `scripts.stop` before `stopCommand`
 - `scripts.status` before `statusCommand`
 - `scripts.restart` before `restartCommand`
+- `scripts.uninstall` before `uninstallCommand`
 - `scripts.openHomepage` before `openHomepageCommand`
 
 For opening the homepage:
@@ -112,36 +118,76 @@ Generated scripts should be:
 - Explicit about working directory
 - Safe on macOS
 
-### 4.1 Start
+### 4.1 Init
+
+The init script should prepare a fresh checkout for first use.
+
+Typical init work includes:
+
+- Creating local config files
+- Bootstrapping environment variables
+- Generating folders or databases the project expects
+- Delegating to the project's own one-time setup command
+
+The init script should be safe to rerun and should not start the service unless the project explicitly treats setup and start as the same action.
+
+### 4.2 Install
+
+The install script should install project dependencies or plugins.
+
+Typical install work includes:
+
+- Running the package manager install step
+- Fetching language-specific dependencies
+- Preparing vendored assets needed before startup
+
+The install script should not start the service. It should be idempotent where practical and should avoid destructive cleanup.
+
+### 4.3 Start
 
 The start script should start exactly the project service or launcher the operator expects.
 
-### 4.2 Stop
+### 4.4 Stop
 
 The stop script should stop only the service managed by the project.
 
-### 4.3 Status
+### 4.5 Status
 
 The status script should return `0` for running, nonzero for stopped or degraded.
 
-### 4.4 Restart
+### 4.6 Restart
 
 The restart script should call stop then start.
 
-### 4.5 Homepage
+### 4.7 Uninstall
+
+The uninstall script should remove project-local runtime artifacts or unregister project-specific setup when the project supports that flow.
+
+Typical uninstall work includes:
+
+- Removing generated config files
+- Cleaning up local caches or temp files created by the install/init flow
+- Reversing project-owned registrations
+
+The uninstall script should be safe to run when the project is already absent or partially removed. It should fail only when the project intentionally requires manual intervention.
+
+### 4.8 Homepage
 
 The homepage script should open the project frontend URL when one exists, otherwise fall back to the canonical project page.
 
-### 4.6 Scaffold inputs
+### 4.9 Scaffold inputs
 
 Scaffold templates should keep wrapper paths and project commands separate.
 
 Recommended template inputs:
 
 - `workingDirectory`: project root used by the wrapper scripts
+- `projectInitCommand`: actual init command for the project setup flow
+- `projectInstallCommand`: actual install command for dependency setup
 - `projectStartCommand`: actual start command for the project service or launcher
 - `projectStopCommand`: actual stop command for the project service or launcher
 - `projectStatusCommand`: actual status command or probe
+- `projectUninstallCommand`: actual uninstall command for cleanup or deregistration
 - `frontendUrl`: preferred homepage target
 - `homepageUrl`: fallback homepage target
 
@@ -240,10 +286,13 @@ The Node scaffold should include:
 The scaffold should keep its output shape aligned:
 
 - `control-panel.json`
+- `scripts/init.sh`
+- `scripts/install.sh`
 - `scripts/start.sh`
 - `scripts/stop.sh`
 - `scripts/status.sh`
 - `scripts/restart.sh`
+- `scripts/uninstall.sh`
 - `scripts/open-homepage.sh`
 - a metrics server or adapter that serves `GET /control-panel/metrics`
 
@@ -263,7 +312,7 @@ The patch should only include files that changed.
 A project is ready when:
 
 - `control-panel.json` exists
-- Start/stop/status work on macOS
+- Init/install/start/stop/status/uninstall work on macOS when the project supports them
 - Homepage opens the right place, with `frontendUrl` preferred when present
 - Metrics are available through the standard endpoint when needed
 - Metrics come from the project itself instead of being inferred from host process state

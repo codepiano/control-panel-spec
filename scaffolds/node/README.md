@@ -16,5 +16,5 @@ Recommended project shape:
 - `scripts/` for lifecycle wrappers
 
 The generated project should prefer a local `metricsUrl` over process guessing.
-Use `projectStartCommand`, `projectStopCommand`, and `projectStatusCommand` as the command inputs for the shell templates.
+Use `projectInitCommand`, `projectInstallCommand`, `projectStartCommand`, `projectStopCommand`, `projectStatusCommand`, and `projectUninstallCommand` as the command inputs for the shell templates.
 If the project uses SQLite, set `databasePath` to the project-owned database file under `db/`.
