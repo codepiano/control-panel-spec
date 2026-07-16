@@ -23,6 +23,10 @@
     "openHomepage": "./scripts/open-homepage.sh"
   },
   "surfaceType": "web",
+  "runtimeMode": "development",
+  "processMode": "managed",
+  "processManager": "project-script",
+  "pidFile": ".runtime/example-project.pid",
   "frontendUrl": "http://127.0.0.1:3000",
   "appUrl": "",
   "appLaunchCommand": "",

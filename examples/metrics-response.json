@@ -1,5 +1,7 @@
 {
   "status": "running",
+  "runtimeMode": "development",
+  "processMode": "managed",
   "pid": 12345,
   "updatedAt": "2026-07-08T09:00:00.000Z",
   "uptimeSec": 120,

@@ -70,6 +70,10 @@ Every controllable project should expose a `control-panel.json` file at the proj
 - `openHomepageCommand`: legacy command for opening the project entry point
 - `openEntryCommand`: command that opens, launches, or focuses the project's primary user entry
 - `surfaceType`: primary surface type: `web`, `desktop`, `hybrid`, or `service`
+- `runtimeMode`: active runtime packaging mode: `development` or `packaged`
+- `processMode`: process ownership mode: `managed`, `external`, or `observed`
+- `processManager`: process owner such as `project-script`, `launchd`, `pm2`, or `docker`
+- `pidFile`: project-relative PID file when the project manages a process directly
 - `frontendUrl`: canonical local or deployed frontend URL
 - `appUrl`: URL or deep link for an application entry when the project is not primarily a browser frontend
 - `appLaunchCommand`: command that launches or focuses a desktop application
@@ -86,6 +90,11 @@ The project owns the processes started by its lifecycle commands. A project scri
 start, stop, inspect, or restart processes belonging to that project. Prefer a project-owned
 PID file, process group, or equivalent supervisor handle; do not use broad host-wide commands
 such as `pkill node`.
+
+`runtimeMode` describes how the application is launched, not whether it is controllable. A
+development Electron application is still eligible for full lifecycle control if its dev command
+is run in the background and tracked by the project. `runtimeMode: packaged` is not required for
+integration.
 
 ### 3.3 Resolution order
 
@@ -195,6 +204,20 @@ Lifecycle commands are the project's process-management boundary:
 - `status` reports the project-owned runtime state without claiming ownership of unrelated processes
 - `restart` performs the equivalent of `stop` followed by `start`
 
+The three process modes have distinct contracts:
+
+- `managed`: project scripts own the process. `start` must return after recording a usable handle,
+  and `stop`, `status`, and `restart` must operate on that handle.
+- `external`: a declared supervisor owns the process. Project scripts delegate to that supervisor
+  and must not independently scan or kill the process.
+- `observed`: the project does not control the process. Unsupported lifecycle actions must return
+  a clear unsupported result, and unavailable runtime state must be reported as `unknown`.
+
+For development-mode Electron apps, do not leave `electron .` attached to the lifecycle command's
+foreground terminal. Use a project-specific PID file/process group, or delegate to an external
+supervisor. If the app is started manually from an IDE or shell, use `observed` until a reliable
+status or metrics source is available.
+
 For desktop or hybrid applications, the launcher process and any backend service may be managed
 as one project runtime. The manifest and metrics response should identify the primary process and
 may include child processes in `processes`.
@@ -225,6 +248,10 @@ Recommended template inputs:
 - `projectStatusCommand`: actual status command or probe
 - `projectUninstallCommand`: actual uninstall command for cleanup or deregistration
 - `surfaceType`: primary project surface
+- `runtimeMode`: active `development` or `packaged` launch mode
+- `processMode`: `managed`, `external`, or `observed`
+- `processManager`: owner of the runtime process
+- `pidFile`: project-relative process handle file when applicable
 - `frontendUrl`: preferred web frontend target
 - `appUrl`: application URL or deep link
 - `appLaunchCommand`: application launch or focus command
@@ -255,6 +282,8 @@ Projects that expose runtime metrics should provide:
 ```json
 {
   "status": "running",
+  "runtimeMode": "development",
+  "processMode": "managed",
   "pid": 12345,
   "updatedAt": "2026-07-08T09:00:00.000Z",
   "uptimeSec": 120,
@@ -280,6 +309,10 @@ Projects that expose runtime metrics should provide:
 
 ### 5.3 Field guidance
 
+- `status`: use `running`, `stopped`, `starting`, `stopping`, `failed`, or `unknown`; use
+  `unknown` when an observed application cannot be verified
+- `runtimeMode`: active packaging mode, normally `development` or `packaged`
+- `processMode`: process ownership mode from the manifest
 - `pid`: numeric process id of the primary service process
 - `uptimeSec`: process uptime in seconds, measured by the service itself
 - `memory.rssBytes`: resident memory in bytes when the runtime can measure it reliably

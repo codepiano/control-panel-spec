@@ -23,3 +23,7 @@ If the project uses SQLite, set `databasePath` to the project-owned database fil
 Set `surfaceType` to `web`, `desktop`, `hybrid`, or `service`. Keep the existing
 `open-homepage.sh` filename if compatibility is useful; for desktop projects it launches or
 focuses the app through `appLaunchCommand` or `appUrl` instead of opening a browser homepage.
+Set `runtimeMode` to `development` when the project intentionally runs Electron from source;
+this does not prevent management. Use `processMode: managed` with a project PID/process-group
+handle, or `processMode: external` with a supervisor such as `launchd` or PM2. Use `observed` only
+when the app is started outside the project tooling and lifecycle control is intentionally unavailable.
