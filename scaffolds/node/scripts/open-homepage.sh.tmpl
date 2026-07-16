@@ -1,14 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-target="{{frontendUrl}}"
-if [ -z "$target" ]; then
-  target="{{homepageUrl}}"
+surface_type="{{surfaceType}}"
+
+if [ -n "{{frontendUrl}}" ] && [ "$surface_type" != "desktop" ] && [ "$surface_type" != "service" ]; then
+  open "{{frontendUrl}}"
+  exit 0
 fi
 
-if [ -z "$target" ]; then
-  echo "No homepage URL configured" >&2
-  exit 1
+if [ -n "{{appLaunchCommand}}" ] && [ "$surface_type" != "web" ]; then
+  cd "{{workingDirectory}}"
+  exec {{appLaunchCommand}}
 fi
 
-open "$target"
+if [ -n "{{appUrl}}" ] && [ "$surface_type" != "web" ]; then
+  open "{{appUrl}}"
+  exit 0
+fi
+
+if [ -n "{{homepageUrl}}" ]; then
+  open "{{homepageUrl}}"
+  exit 0
+fi
+
+echo "No project entry configured" >&2
+exit 1

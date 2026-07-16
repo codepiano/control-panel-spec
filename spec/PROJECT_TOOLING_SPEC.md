@@ -15,7 +15,7 @@ The design goals are:
 This spec covers:
 
 - Discovering project roots from `control-panel.json`
-- Generating init, install, start, stop, status, restart, homepage, and metrics integrations
+- Generating init, install, start, stop, status, restart, entry-point, and metrics integrations
 - Exposing runtime status through a standard HTTP endpoint
 - Supporting the Node.js scaffold under one repository
 
@@ -67,15 +67,25 @@ Every controllable project should expose a `control-panel.json` file at the proj
 - `uninstallCommand`: lifecycle uninstall command
 - `statusCommand`: lifecycle status command
 - `restartCommand`: lifecycle restart command
-- `openHomepageCommand`: command that opens the project homepage
+- `openHomepageCommand`: legacy command for opening the project entry point
+- `openEntryCommand`: command that opens, launches, or focuses the project's primary user entry
+- `surfaceType`: primary surface type: `web`, `desktop`, `hybrid`, or `service`
 - `frontendUrl`: canonical local or deployed frontend URL
+- `appUrl`: URL or deep link for an application entry when the project is not primarily a browser frontend
+- `appLaunchCommand`: command that launches or focuses a desktop application
 - `homepageUrl`: project homepage or repo URL fallback
 - `metricsUrl`: HTTP endpoint that returns runtime metrics JSON
 - `databasePath`: path to the project-owned SQLite database file when the project uses SQLite
 - `notes`: short operator note
 - `specUrl`: link to the project's own spec if it has one
 - `scripts`: optional object mapping lifecycle names to relative script paths
-- `scripts.init`, `scripts.install`, `scripts.start`, `scripts.stop`, `scripts.status`, `scripts.restart`, `scripts.uninstall`, `scripts.openHomepage`: recommended script keys
+- `scripts.init`, `scripts.install`, `scripts.start`, `scripts.stop`, `scripts.status`, `scripts.restart`, `scripts.uninstall`, `scripts.openEntry`: recommended script keys
+- `scripts.openHomepage`: backwards-compatible alias for `scripts.openEntry`
+
+The project owns the processes started by its lifecycle commands. A project script must only
+start, stop, inspect, or restart processes belonging to that project. Prefer a project-owned
+PID file, process group, or equivalent supervisor handle; do not use broad host-wide commands
+such as `pkill node`.
 
 ### 3.3 Resolution order
 
@@ -90,16 +100,21 @@ Recommended precedence:
 - `scripts.status` before `statusCommand`
 - `scripts.restart` before `restartCommand`
 - `scripts.uninstall` before `uninstallCommand`
+- `scripts.openEntry` before `openEntryCommand`
 - `scripts.openHomepage` before `openHomepageCommand`
 
-For opening the homepage:
+For opening the primary entry point:
 
-1. `frontendUrl`
-2. Project-authored homepage script
-3. `homepageUrl`
-4. Package metadata or git remote inference
+1. Project-authored entry script
+2. `frontendUrl` for `web` or `hybrid` projects
+3. `appUrl` for `desktop` or `hybrid` projects
+4. `appLaunchCommand` for application-only projects
+5. `homepageUrl`
+6. Package metadata or git remote inference
 
-The homepage resolution must always prefer `frontendUrl` when it exists. Do not promote a fallback URL above it.
+`openHomepageCommand` remains supported as a compatibility alias. For new projects,
+`openEntryCommand` and `scripts.openEntry` are preferred. An entry script may launch or focus
+an application, open a deep link, or open a browser URL depending on `surfaceType`.
 
 For metrics:
 
@@ -171,11 +186,32 @@ Typical uninstall work includes:
 
 The uninstall script should be safe to run when the project is already absent or partially removed. It should fail only when the project intentionally requires manual intervention.
 
-### 4.8 Homepage
+### 4.8 Process ownership
 
-The homepage script should open the project frontend URL when one exists, otherwise fall back to the canonical project page.
+Lifecycle commands are the project's process-management boundary:
 
-### 4.9 Scaffold inputs
+- `start` starts only the project's declared service or application processes
+- `stop` stops only those processes and should be safe when they are already stopped
+- `status` reports the project-owned runtime state without claiming ownership of unrelated processes
+- `restart` performs the equivalent of `stop` followed by `start`
+
+For desktop or hybrid applications, the launcher process and any backend service may be managed
+as one project runtime. The manifest and metrics response should identify the primary process and
+may include child processes in `processes`.
+
+### 4.9 Primary entry
+
+The primary-entry script should do the action appropriate to the project surface:
+
+- `web`: open `frontendUrl`
+- `desktop`: launch or focus the application using `appLaunchCommand` or `appUrl`
+- `hybrid`: open the frontend when available, otherwise launch or focus the application
+- `service`: report that no interactive entry is available, unless `appUrl` or `homepageUrl` is explicitly configured
+
+The existing `open-homepage.sh` filename may remain as a compatibility wrapper, but its behavior
+must follow this primary-entry contract.
+
+### 4.10 Scaffold inputs
 
 Scaffold templates should keep wrapper paths and project commands separate.
 
@@ -188,7 +224,10 @@ Recommended template inputs:
 - `projectStopCommand`: actual stop command for the project service or launcher
 - `projectStatusCommand`: actual status command or probe
 - `projectUninstallCommand`: actual uninstall command for cleanup or deregistration
-- `frontendUrl`: preferred homepage target
+- `surfaceType`: primary project surface
+- `frontendUrl`: preferred web frontend target
+- `appUrl`: application URL or deep link
+- `appLaunchCommand`: application launch or focus command
 - `homepageUrl`: fallback homepage target
 
 This separation keeps `control-panel.json` stable while still allowing the generated shell scripts to invoke the real project-specific command.
@@ -296,6 +335,9 @@ The scaffold should keep its output shape aligned:
 - `scripts/open-homepage.sh`
 - a metrics server or adapter that serves `GET /control-panel/metrics`
 
+The scaffold may keep `open-homepage.sh` as the compatibility filename for the primary-entry
+action. New integrations should expose it through `openEntryCommand` and `scripts.openEntry`.
+
 For Node projects that separate frontend and backend, `frontendUrl` should point at the frontend surface and the metrics endpoint should live with the backend.
 
 ## 8. Output Contract
@@ -313,7 +355,7 @@ A project is ready when:
 
 - `control-panel.json` exists
 - Init/install/start/stop/status/uninstall work on macOS when the project supports them
-- Homepage opens the right place, with `frontendUrl` preferred when present
+- The primary entry opens, launches, or focuses the right place for the declared `surfaceType`
 - Metrics are available through the standard endpoint when needed
 - Metrics come from the project itself instead of being inferred from host process state
 - The manifest is stable enough for another AI to reproduce the setup
