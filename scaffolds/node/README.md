@@ -27,3 +27,8 @@ Set `runtimeMode` to `development` when the project intentionally runs Electron 
 this does not prevent management. Use `processMode: managed` with a project PID/process-group
 handle, or `processMode: external` with a supervisor such as `launchd` or PM2. Use `observed` only
 when the app is started outside the project tooling and lifecycle control is intentionally unavailable.
+
+For Electron development mode, `projectStartCommand` must start the app in the background and
+record a project-specific PID or supervisor handle. `projectStopCommand` and
+`projectStatusCommand` must use that same handle. Never implement these commands with broad
+`pkill electron` or `pkill node` patterns.

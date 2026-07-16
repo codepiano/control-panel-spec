@@ -1,6 +1,6 @@
 # Project Tooling Spec
 
-Version: `1.1`
+Version: `1.2`
 
 This document is the canonical contract for projects that want a standard control surface and for AIs that generate project lifecycle scripts.
 
@@ -170,14 +170,28 @@ The install script should not start the service. It should be idempotent where p
 ### 4.3 Start
 
 The start script should start exactly the project service or launcher the operator expects.
+For `managed` and `external` modes it must be non-blocking after the process or supervisor has
+accepted the start request. It should be idempotent: starting an already-running project should
+not create a second instance.
 
 ### 4.4 Stop
 
 The stop script should stop only the service managed by the project.
+It should succeed when the project is already stopped. A managed process should receive a graceful
+termination signal first, followed by a bounded wait and forceful termination only for the same
+verified process or process group.
 
 ### 4.5 Status
 
-The status script should return `0` for running, nonzero for stopped or degraded.
+The status script should return the following exit codes:
+
+- `0`: running or healthy
+- `1`: stopped, failed, or degraded
+- `2`: unsupported or invalid process-control configuration
+- `3`: state unknown because the process is externally started and cannot be verified
+
+When the control surface needs machine-readable output, the script should print the same status
+vocabulary used by the metrics contract rather than human-only prose.
 
 ### 4.6 Restart
 
@@ -218,6 +232,10 @@ foreground terminal. Use a project-specific PID file/process group, or delegate 
 supervisor. If the app is started manually from an IDE or shell, use `observed` until a reliable
 status or metrics source is available.
 
+The development and packaged launchers should share the same lifecycle wrapper interface. The
+active launcher may be selected by `runtimeMode`, an environment variable, or a project-owned
+configuration file, but `start`, `stop`, `status`, and `restart` must retain the same semantics.
+
 For desktop or hybrid applications, the launcher process and any backend service may be managed
 as one project runtime. The manifest and metrics response should identify the primary process and
 may include child processes in `processes`.
@@ -230,6 +248,9 @@ The primary-entry script should do the action appropriate to the project surface
 - `desktop`: launch or focus the application using `appLaunchCommand` or `appUrl`
 - `hybrid`: open the frontend when available, otherwise launch or focus the application
 - `service`: report that no interactive entry is available, unless `appUrl` or `homepageUrl` is explicitly configured
+
+`openEntry` is not a second process supervisor. It should focus or open an already-running app and
+may delegate to the idempotent `start` flow when the project explicitly supports that behavior.
 
 The existing `open-homepage.sh` filename may remain as a compatibility wrapper, but its behavior
 must follow this primary-entry contract.
@@ -345,6 +366,33 @@ Prefer bytes in the contract and let the consumer decide how to render units. If
 - Add the metrics endpoint to the backend service when the app already exposes HTTP
 - If the app is a desktop shell, keep the launcher and the runtime service separate when possible
 - Use `databasePath` to point at the project-owned SQLite file when the project uses SQLite
+
+### 6.1 Electron development example
+
+An Electron project that is normally run from source can use the same contract as a packaged app:
+
+```json
+{
+  "surfaceType": "desktop",
+  "runtimeMode": "development",
+  "processMode": "managed",
+  "processManager": "project-script",
+  "pidFile": ".runtime/electron.pid",
+  "startCommand": "./scripts/start.sh",
+  "stopCommand": "./scripts/stop.sh",
+  "statusCommand": "./scripts/status.sh",
+  "restartCommand": "./scripts/restart.sh",
+  "openEntryCommand": "./scripts/open-homepage.sh"
+}
+```
+
+In this mode, `start.sh` may invoke the source-based Electron command, but it must detach it from
+the caller, record the process handle, and capture logs in a project-owned location. `stop.sh`
+must validate that handle before sending signals. The scripts must not match processes by a broad
+name such as `electron` or `node`.
+
+If the same project sometimes runs a packaged application, keep the wrapper paths unchanged and
+switch only the project-owned launcher configuration or `runtimeMode` value.
 
 ## 7. Scaffold Policy
 
