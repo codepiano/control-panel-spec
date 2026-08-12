@@ -1,6 +1,6 @@
 # Project Tooling Spec
 
-Version: `1.2`
+Version: `1.4`
 
 This document is the canonical contract for projects that want a standard control surface and for AIs that generate project lifecycle scripts.
 
@@ -124,6 +124,19 @@ For opening the primary entry point:
 `openHomepageCommand` remains supported as a compatibility alias. For new projects,
 `openEntryCommand` and `scripts.openEntry` are preferred. An entry script may launch or focus
 an application, open a deep link, or open a browser URL depending on `surfaceType`.
+
+### 3.4 Graphical manifest editing
+
+`control-panel.json` is the single source of truth for a discovered project. A control surface may
+provide a graphical editor that reads and atomically writes that same manifest; it must not create
+a separate per-project override layer.
+
+The editor may expose only presentation fields: `name`, `frontendUrl` (including its port), and
+`notes`. It must preserve every other manifest field unchanged. Lifecycle commands, script paths,
+working directory, process ownership, and runtime fields are specification-owned and must not be
+editable through the control surface. At minimum, validate a non-empty display name, an `http` or
+`https` `frontendUrl` when supplied, a port between `1` and `65535` when the URL contains one,
+and bounded single-line text inputs.
 
 For metrics:
 
