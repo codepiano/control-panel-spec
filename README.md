@@ -11,6 +11,7 @@
 Project Tooling 规定了：
 
 - 项目如何通过 `control-panel.json` 声明自己的控制入口
+- 项目如何用仓库内的相对路径声明跨控制界面复用的图标
 - AI 如何优先复用已有命令，而不是重新发明启动方式
 - `init`、`install`、`start`、`stop`、`status`、`restart`、`uninstall` 的职责边界
 - 如何识别并只管理项目自己的进程

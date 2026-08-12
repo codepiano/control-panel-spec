@@ -1,6 +1,6 @@
 # Project Tooling Spec
 
-Version: `1.5`
+Version: `1.6`
 
 This document is the canonical contract for projects that want a standard control surface and for AIs that generate project lifecycle scripts.
 
@@ -62,6 +62,7 @@ Every controllable project should expose a `control-panel.json` file at the proj
 ### 3.2 Recommended fields
 
 - `id`: stable identifier
+- `icon`: project-relative path to the icon used by compatible control surfaces
 - `startCommand`: lifecycle start command
 - `installCommand`: lifecycle install command
 - `initCommand`: lifecycle initialization command
@@ -98,7 +99,20 @@ development Electron application is still eligible for full lifecycle control if
 is run in the background and tracked by the project. `runtimeMode: packaged` is not required for
 integration.
 
-### 3.3 Resolution order
+### 3.3 Project icon
+
+`icon` identifies the project visually across compatible control surfaces. It must be a relative
+path resolved from the directory containing `control-panel.json`; absolute paths, URLs, data URLs,
+and paths that escape the project root are invalid. Recommended formats are PNG, JPEG, and WebP.
+Use a square source image with a transparent or simple background, ideally at least `128 x 128`
+pixels. The consumer decides the rendered size and may convert the image to a safe local format.
+
+The icon is presentation metadata only. Its absence must never affect project discovery or
+lifecycle control. A control surface may generate a fallback icon or keep a user-local icon choice
+in its own preferences. Such a local choice is a consumer display preference, not another copy of
+the project manifest and not a portable project setting.
+
+### 3.4 Resolution order
 
 When both direct commands and script paths are present, prefer the project-authored script path.
 
@@ -127,14 +141,14 @@ For opening the primary entry point:
 `openEntryCommand` and `scripts.openEntry` are preferred. An entry script may launch or focus
 an application, open a deep link, or open a browser URL depending on `surfaceType`.
 
-### 3.4 Graphical manifest editing
+### 3.5 Graphical manifest editing
 
 `control-panel.json` is the single source of truth for a discovered project. A control surface may
 provide a graphical editor that reads and atomically writes that same manifest; it must not create
 a separate per-project override layer.
 
-The editor may expose only presentation fields: `name`, `frontendUrl` (including its port), and
-`notes`. It must preserve every other manifest field unchanged. Lifecycle commands, script paths,
+The editor may expose only presentation fields: `name`, `icon`, `frontendUrl` (including its port),
+and `notes`. It must preserve every other manifest field unchanged. Lifecycle commands, script paths,
 working directory, process ownership, and runtime fields are specification-owned and must not be
 editable through the control surface. At minimum, validate a non-empty display name, an `http` or
 `https` `frontendUrl` when supplied, a port between `1` and `65535` when the URL contains one,

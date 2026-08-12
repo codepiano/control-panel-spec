@@ -43,6 +43,7 @@ guidance in the spec and generate only the files the target project actually nee
 3. Define the manifest.
 
    - Always provide `name` and `workingDirectory`.
+   - Preserve an existing project-relative `icon`; add one only when the project already has a suitable repository-owned image.
    - Prefer project-authored `scripts/*.sh` paths over inline commands.
    - Include `surfaceType`, `runtimeMode`, `processMode`, `processManager`, and `pidFile` when
      applicable.
