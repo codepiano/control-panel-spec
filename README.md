@@ -73,10 +73,9 @@ project-root/
 | 目录 | 用途 |
 | --- | --- |
 | [spec/](./spec/) | 给 AI 和项目维护者使用的正式规范 |
-| [scaffolds/node/](./scaffolds/node/) | Node.js 项目的可复用 manifest、脚本和 metrics 模板 |
-| [examples/](./examples/) | manifest 与 metrics 返回示例 |
+| [SKILL.md](./SKILL.md) | 本仓库自身的 AI Skill，负责按规范检查、生成和验证项目接入 |
 
-当前只提供 Node.js 脚手架；其他运行时可以按同一生命周期和 manifest 语义扩展，不应复制出另一套协议。
+当前 Skill 以 Node.js、TypeScript 和 Electron 项目为主要执行场景；其他运行时可以按同一生命周期和 manifest 语义扩展，不应复制出另一套协议。
 
 ## 使用边界
 
@@ -88,11 +87,60 @@ project-root/
 
 ## 开始使用
 
-从 [Project Tooling Spec](./spec/PROJECT_TOOLING_SPEC.md) 开始。若项目是 Node.js 项目，可参考 [Node.js 脚手架](./scaffolds/node/) 和 [示例 manifest](./examples/control-panel.json)。
+从 [SKILL.md](./SKILL.md) 开始，规范正文位于 [Project Tooling Spec](./spec/PROJECT_TOOLING_SPEC.md)。
+
+## 安装 Skill
+
+Skill 目录需要直接包含 `SKILL.md`。默认安装位置是 `$CODEX_HOME/skills`；如果没有设置
+`CODEX_HOME`，使用 `~/.codex/skills`。
+
+### 本地开发链接
+
+适合持续修改这个仓库的情况。链接后，仓库中的修改会直接成为 Skill 的修改：
+
+```bash
+SKILLS_DIR="${CODEX_HOME:-$HOME/.codex}/skills"
+mkdir -p "$SKILLS_DIR"
+ln -s "/Users/codepiano/Documents/control-panel-tooling" "$SKILLS_DIR/project-tooling"
+```
+
+目标路径已存在时，先确认它不是正在使用的 Skill，再手动处理冲突，不要覆盖未知目录。
+
+### 固定副本
+
+适合把某个版本安装到其他机器或项目环境：
+
+```bash
+SKILLS_DIR="${CODEX_HOME:-$HOME/.codex}/skills"
+mkdir -p "$SKILLS_DIR/project-tooling"
+cp -R /path/to/project-tooling/. "$SKILLS_DIR/project-tooling/"
+```
+
+如果从私有 GitHub 仓库安装，可以先克隆，再执行上面的复制步骤：
+
+```bash
+git clone git@github.com:codepiano/project-tooling.git /path/to/project-tooling
+```
+
+安装后，在新的 Codex 任务中使用：
+
+```text
+$project-tooling 为当前项目生成或修复项目接入脚本
+```
+
+验证 Skill 包结构：
+
+```bash
+cd /path/to/project-tooling
+python3 /Users/codepiano/.codex/skills/.system/skill-creator/scripts/quick_validate.py .
+./scripts/check-spec-sync.sh
+```
+
+如果 Skill 列表没有立即出现，重新加载 Codex 后再使用 `$project-tooling`。
 
 ## 贡献
 
-欢迎改进规范、示例和脚手架。新增运行时脚手架时，请保留同一份 manifest、生命周期、进程归属与 metrics 语义，并同时更新规范和示例。
+欢迎改进规范和 Skill 工作流。新增运行时支持时，请保留同一份 manifest、生命周期、进程归属与 metrics 语义。
 
 ## License
 

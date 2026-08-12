@@ -1,6 +1,6 @@
 # Project Tooling Spec
 
-Version: `1.4`
+Version: `1.5`
 
 This document is the canonical contract for projects that want a standard control surface and for AIs that generate project lifecycle scripts.
 
@@ -8,7 +8,7 @@ The design goals are:
 
 - One manifest format for discovery and control
 - One metrics contract for runtime status and resource usage
-- One Node.js scaffold repository that stays small and reusable
+- One reusable AI Skill for project integration
 
 ## 1. Scope
 
@@ -17,7 +17,7 @@ This spec covers:
 - Discovering project roots from `control-panel.json`
 - Generating init, install, start, stop, status, restart, entry-point, and metrics integrations
 - Exposing runtime status through a standard HTTP endpoint
-- Supporting the Node.js scaffold under one repository
+- Supporting Node.js, TypeScript, and Electron project integration
 
 This spec does not cover:
 
@@ -26,27 +26,29 @@ This spec does not cover:
 - UI implementation details
 - Build or release pipelines
 
-## 2. Repository Layout
+## 2. Skill Package Layout
 
 Recommended top-level layout:
 
 ```text
 project-tooling/
+  SKILL.md
+  agents/
+    openai.yaml
   spec/
     PROJECT_TOOLING_SPEC.md
-  scaffolds/
-    node/
-  examples/
+  scripts/
+    check-spec-sync.sh
 ```
 
-The `examples/` directory may include both metrics payload examples and a reference `control-panel.json` manifest.
-
-The repository currently ships only the Node.js scaffold. If additional runtimes are added later, they should preserve the same conceptual shape:
+The Skill package contains the contract and validation workflow. Generated project files belong in
+the target project, not in this repository. If additional runtimes are supported later, they should
+preserve the same conceptual shape:
 
 - `control-panel.json`
 - `scripts/`
 - `metrics` endpoint or adapter
-- Node.js support files such as `package.json`, `tsconfig.json`, or framework-specific config when needed
+- runtime-specific project files when needed
 
 ## 3. Project Manifest
 
@@ -407,30 +409,19 @@ name such as `electron` or `node`.
 If the same project sometimes runs a packaged application, keep the wrapper paths unchanged and
 switch only the project-owned launcher configuration or `runtimeMode` value.
 
-## 7. Scaffold Policy
+## 7. Skill Execution Policy
 
-The Node scaffold should include:
-
-- A manifest template
-- Lifecycle script templates
-- A metrics adapter or example service
-- A README explaining the common project layout and runtime-specific inputs
-
-The scaffold should keep its output shape aligned:
+The Skill should inspect the target project before generating files. It may generate a manifest,
+lifecycle scripts, a metrics adapter, or runtime-specific support files, but it must not assume a
+fixed output template. Generated output should remain aligned with:
 
 - `control-panel.json`
-- `scripts/init.sh`
-- `scripts/install.sh`
-- `scripts/start.sh`
-- `scripts/stop.sh`
-- `scripts/status.sh`
-- `scripts/restart.sh`
-- `scripts/uninstall.sh`
-- `scripts/open-homepage.sh`
-- a metrics server or adapter that serves `GET /control-panel/metrics`
+- project-owned lifecycle scripts
+- a primary-entry action appropriate to `surfaceType`
+- a metrics endpoint or explicit unsupported/unknown state
 
-The scaffold may keep `open-homepage.sh` as the compatibility filename for the primary-entry
-action. New integrations should expose it through `openEntryCommand` and `scripts.openEntry`.
+The Skill should prefer existing project commands and preserve project-specific conventions. It
+should return only the files that changed and include validation results.
 
 For Node projects that separate frontend and backend, `frontendUrl` should point at the frontend surface and the metrics endpoint should live with the backend.
 

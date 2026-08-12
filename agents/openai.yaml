@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Tooling"
+  short_description: "Generate and validate project manifests and lifecycle scripts"
+  default_prompt: "Use $project-tooling to integrate this project with the repository standard."
