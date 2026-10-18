@@ -1,6 +1,6 @@
 # Project Tooling Spec
 
-Version: `1.6`
+Version: `1.9`
 
 This document is the canonical contract for projects that want a standard control surface and for AIs that generate project lifecycle scripts.
 
@@ -57,7 +57,7 @@ Every controllable project should expose a `control-panel.json` file at the proj
 ### 3.1 Required fields
 
 - `name`: display name
-- `workingDirectory`: directory used when running commands
+- `workingDirectory`: directory used when running commands; optional for `kind: collection`
 
 ### 3.2 Recommended fields
 
@@ -82,6 +82,7 @@ Every controllable project should expose a `control-panel.json` file at the proj
 - `appLaunchCommand`: command that launches or focuses a desktop application
 - `homepageUrl`: project homepage or repo URL fallback
 - `metricsUrl`: HTTP endpoint that returns runtime metrics JSON
+- `ports`: unique local TCP port integers reserved by this runtime (see section 3.7)
 - `databasePath`: path to the project-owned SQLite database file when the project uses SQLite
 - `notes`: short operator note
 - `specUrl`: link to the project's own spec if it has one
@@ -161,6 +162,102 @@ For metrics:
 3. No metric display if neither is available
 
 The control surface should use project-authored metrics first. It should not guess runtime status from process tables, open ports, or other inferred host-state heuristics when a project-provided endpoint is available.
+
+### 3.6 Declared child projects and collections
+
+Nested directories may encode a product's components, a monorepo, several Git checkouts,
+or a local workspace. The outer manifest must describe that relationship explicitly instead
+of relying on a consumer to recursively guess which directories represent services.
+
+Additional fields:
+
+- `kind`: `project` (default, backwards compatible) or `collection`.
+- `children`: an array of child references. Each reference requires `path`, a relative directory
+  containing another `control-panel.json`; optional `role` describes the component's purpose
+  (for example `api`, `frontend`, `worker`), and `notes` explains why it belongs here.
+- A collection requires `name`; `id` is recommended. It has no independent runtime and must
+  not declare lifecycle commands, lifecycle script mappings, or automatic script fallbacks.
+  A collection may provide `notes` and `icon` as presentation metadata. `workingDirectory`
+  is unnecessary because the collection does not execute commands.
+- A project may both own a runtime and declare children. Its lifecycle commands control only
+  its own runtime; they must not also start/stop children exposed as independent services.
+
+Example outer manifest for several Git checkouts and component services:
+
+```json
+{
+  "id": "research-workspace",
+  "name": "Research Workspace",
+  "kind": "collection",
+  "notes": "Repositories and services used together for research",
+  "children": [
+    { "path": "repos/library", "role": "knowledge", "notes": "Knowledge backend" },
+    { "path": "repos/reader/apps/web", "role": "frontend", "notes": "Reading interface" },
+    { "path": "repos/reader/services/indexer", "role": "worker", "notes": "Background indexing" }
+  ]
+}
+```
+
+Discovery and identity rules:
+
+1. Resolve each `path` against the directory containing the outer manifest, never against
+   `workingDirectory`. References identify directories; arbitrary manifest filenames and
+   glob patterns are not supported. Paths must be non-empty, relative, and strict descendants
+   of the outer directory both lexically and after resolving symbolic links. Absolute paths,
+   the parent directory itself, escapes, and symbolic-link escapes are invalid.
+2. Follow declared children recursively even if the referenced directory is deeper than the
+   consumer's initial scan depth. Do not stop at Git repository boundaries; do not search
+   unrelated nested directories or synthesize lifecycle commands from package scripts.
+3. Each child retains its own `name`, `id`, working directory, scripts, runtime ownership, and
+   presentation fields. Do not inherit lifecycle commands or working directories. The
+   relationship metadata belongs to the reference in the outer manifest.
+4. Discover each manifest only once even when initial scan roots overlap or a child is
+   reachable through several declarations. Manifest location is the identity boundary;
+   repeated `id` values in different directories do not merge services. Keep the first
+   declared ownership chain and surface parent names and roles to the operator.
+5. Consumers must bound traversal (Control Panel: at most 1,000 manifests and 32 relationship
+   levels), prevent cycles, and surface invalid references, unreadable/malformed manifests,
+   and unsupported kinds. One invalid child must not hide valid siblings.
+6. Collections organize descendants into launchable sets; they are not stopped services and
+   must not inflate service/runtime counts. Collection launch expands to descendant project
+   runtimes, deduplicates them, skips running or transitioning services, and reports results
+   per service. Declaration order is discovery order, not a dependency scheduler. Starting
+   prerequisites or waiting for readiness is outside this extension.
+7. Group names derived from ownership relationships are portable manifest facts. Operator
+   favorites, tags, personal groups, and selections are local consumer preferences; they
+   must not overwrite the structural `children` declarations.
+
+Projects without `kind` or `children` preserve the existing single-project contract. A
+consumer that supports only earlier spec versions will not understand collection manifests;
+update that consumer before using `kind: collection`.
+
+### 3.7 Local TCP port allocation
+
+`ports` is an optional array of unique integers from 1 through 65535. It declares all local TCP
+ports owned by this independently controlled runtime, including non-HTTP and secondary backend
+listeners. Local HTTP(S) `frontendUrl` and `metricsUrl` ports also imply allocations; consumers
+merge and deduplicate these with `ports`. Recognized local URL hosts are `localhost`, `127.0.0.1`,
+`0.0.0.0`, `[::1]` and `[::]`; omitted HTTP/HTTPS ports mean 80/443. Remote URLs do not reserve
+local ports. Collections have no runtime and must not declare port allocations.
+
+A host registry must consider stopped services' allocations, not only live listeners. Reserve
+before finalizing launch configuration and keep the reservation until an explicit configuration
+change/removal. Independent runtimes must not claim the same local TCP port number. This version
+uses conservative host-wide port ownership across bind addresses; it does not define UDP
+allocation, remote-host allocation, reverse-proxy sharing or automatic service migration.
+
+Lifecycle scripts must apply the declared ports to the real runtime. Fail visibly when a port
+cannot be bound; do not silently switch to another number. Updating URLs alone is insufficient.
+Metrics and frontend may share a port when served by the same runtime. A parent must not reserve
+ports owned by its independently controlled children.
+
+The portable contract is the manifest. Control Panel's optional local registration API serializes
+allocation, validates existing manifests and live TCP listeners, writes `ports` to the project's
+manifest and adds undiscovered project roots to host discovery. The skill's
+`scripts/port-registry.mjs` helper implements spec retrieval, inventory and registration. See
+`references/port-registration.md` for commands and endpoint parameters. Registration success is
+not a readiness check or proof of listener ownership. Direct starts and offline edits remain
+subject to the final bind result; startup need not require the registry to be online.
 
 ## 4. Lifecycle Scripts
 
@@ -269,7 +366,42 @@ For desktop or hybrid applications, the launcher process and any backend service
 as one project runtime. The manifest and metrics response should identify the primary process and
 may include child processes in `processes`.
 
-### 4.9 Primary entry
+### 4.9 Project-owned externally supervised components
+
+A tunnel, worker, sidecar or other supporting runtime belongs to its product project. Declare it
+in the product's `children` with a role (for example `tunnel`), and keep its manifest and lifecycle
+adapter under that project, for example `tooling/tunnel/`. It need not be a separate repository.
+Do not create a detached host-only project entry or fold its process control into the parent scripts.
+Each child uses `surfaceType: service`, `processMode: external`, and its actual `processManager`.
+
+For a per-user macOS LaunchAgent, `launchd.json` identifies the exact `label` and `plist` path
+(`~` expands to the current user's home). The project-owned adapter validates the plist Label and
+the loaded job's plist path before mutations. Use `launchctl print gui/<uid>/<label>` as the process
+authority. Start reuses a running job, bootstraps the existing plist if unloaded, or kickstarts a
+loaded stopped job. Stop uses `bootout` and confirms unloading; killing its PID is insufficient for
+KeepAlive jobs. Restart unloads then starts. Missing configuration, supervisor query failures and
+rejected actions must fail visibly. Do not automatically create profiles, install credentials,
+change login policy, or use broad process-name matches. Recovery helpers must respect an unloaded
+job; they must not bootstrap a target deliberately stopped by the operator. RunAtLoad can start the
+job again on a future login; stopping is not uninstalling or disabling login startup.
+
+The reusable `scripts/scaffold-launchd.py` generator copies `templates/launchd/service.py` and
+creates four wrappers plus both manifests. It never starts a service. Generated adapters are
+project-owned copies, so the project works without a global Skill installation at runtime.
+`--tunnel-profile` enables the optional tunnel-client probe and validates the profile in the plist.
+Readiness uses the exact launchd PID's loopback listener and the client's health/ready/control-plane
+poll checks. Do not copy profile contents, credentials or full health error output into manifests,
+logs or repository files. Keep actual tunnel transport and proxy configuration in the existing
+host profile/LaunchAgent.
+
+Process state and readiness are separate: a live process returns status exit 0 even when readiness
+is `unready` or `unknown`; text output must state that distinction. Optional `status --json` adds
+`readiness: ready|unready|unknown` and the authoritative PID to the existing status vocabulary.
+Local readiness is not proof of remote MCP availability; verify a real remote tool call before
+claiming that. No HTTP metrics server or fixed admin port is required for an external adapter.
+Ephemeral loopback admin ports remain runtime-owned and are not invented fixed reservations.
+
+### 4.10 Primary entry
 
 The primary-entry script should do the action appropriate to the project surface:
 
@@ -284,7 +416,7 @@ may delegate to the idempotent `start` flow when the project explicitly supports
 The existing `open-homepage.sh` filename may remain as a compatibility wrapper, but its behavior
 must follow this primary-entry contract.
 
-### 4.10 Scaffold inputs
+### 4.11 Scaffold inputs
 
 Scaffold templates should keep wrapper paths and project commands separate.
 

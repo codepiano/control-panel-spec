@@ -1,4 +1,4 @@
 interface:
   display_name: "Project Tooling"
-  short_description: "Generate and validate project manifests and lifecycle scripts"
-  default_prompt: "Use $project-tooling to integrate this project with the repository standard."
+  short_description: "Register local ports and generate project lifecycle scripts"
+  default_prompt: "Use $project-tooling to read the spec, register local service ports, and generate or repair this project’s manifest and lifecycle scripts."

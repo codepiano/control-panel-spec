@@ -1,6 +1,6 @@
 ---
 name: project-tooling
-description: Integrate projects with the repository's generic project tooling contract by inspecting the project, generating or repairing control-panel.json, lifecycle scripts, primary-entry behavior, and project-owned metrics. Use when a project needs standardized start/stop/status/restart integration, Node.js or Electron development-mode support, SQLite/full-stack project alignment, or validation against the Project Tooling Spec.
+description: Integrate projects with the repository's generic project tooling contract by inspecting the project, generating or repairing control-panel.json, lifecycle scripts, primary-entry behavior, and project-owned metrics. Use when a project needs standardized start/stop/status/restart integration, Node.js or Electron development-mode support, SQLite/full-stack project alignment, local TCP port registration through Control Panel, or validation against the Project Tooling Spec.
 ---
 
 # Project Tooling
@@ -40,9 +40,28 @@ guidance in the spec and generate only the files the target project actually nee
    - Choose `observed` only when the project is intentionally started outside tooling and cannot
      reliably control its process.
 
-3. Define the manifest.
+3. Register local ports and define the manifest.
 
-   - Always provide `name` and `workingDirectory`.
+   - For local network services, read [references/port-registration.md](references/port-registration.md).
+     Use `scripts/port-registry.mjs spec` to retrieve the packaged spec and `list` to inspect the
+     host inventory. Create a minimal manifest if absent, then use `register` to persist an
+     allocation before generating final launch configuration. Candidate ports from `list` are
+     not reservations. Preserve existing assignments when migrating clients is outside scope.
+   - Use returned ports in the application's real startup settings, explicit manifest `ports`,
+     local frontend/metrics URLs, and any in-scope consumers. Configure strict port binding;
+     silently falling back to another port violates the declared allocation.
+   - Registration supports the local Control Panel host. If it is unavailable, report the
+     unregistered state and continue independent script work; do not claim a reservation.
+
+
+   - Always provide `name`; provide `workingDirectory` for controllable projects.
+   - Inspect whether nested repositories/services form a workspace or product. Declare their
+     relative directories in the outer manifest's `children` with `role` and `notes` describing
+     the relationship; retain each child's own manifest and lifecycle commands.
+   - Use `kind: collection` for an outer directory with no runtime. Do not generate lifecycle
+     commands, process ownership fields, or status/metrics for the collection itself.
+   - A runtime-owning parent may declare children, but its scripts must not also control those
+     independently exposed child services. Do not invent undeclared child services.
    - Preserve an existing project-relative `icon`; add one only when the project already has a suitable repository-owned image.
    - Prefer project-authored `scripts/*.sh` paths over inline commands.
    - Include `surfaceType`, `runtimeMode`, `processMode`, `processManager`, and `pidFile` when
@@ -55,6 +74,12 @@ guidance in the spec and generate only the files the target project actually nee
    - Set `metricsUrl` only when the endpoint is real and project-owned.
 
 4. Generate or repair lifecycle scripts.
+
+   - For a supporting external runtime (tunnel, sidecar, worker), keep it inside its owning project
+     and declare it in `children`. Read [references/launchd-components.md](references/launchd-components.md)
+     for existing per-user LaunchAgents. Use `scripts/scaffold-launchd.py` to generate project-owned
+     scripts; never start or restart the live job to validate the integration. Confirm recovery
+     helpers respect an unloaded job and distinguish process state from local readiness.
 
    - `start.sh` must start only the project's declared service or application.
    - In `managed` mode, start must be non-blocking, idempotent, and record a PID, process group,
@@ -95,7 +120,10 @@ guidance in the spec and generate only the files the target project actually nee
 
 7. Validate before handing off.
 
-   - Parse `control-panel.json` as JSON.
+   - Parse every parent and child `control-panel.json` as JSON.
+   - Validate every child path as a strict descendant of its declaring directory, including
+     symbolic-link resolution. Validate missing references and cycles and explain the
+     declared roles. Confirm that collections have no runtime commands.
    - Run `bash -n` against generated shell scripts.
    - Check every manifest script path exists and is executable when generated.
    - Verify that lifecycle commands use the declared working directory.
@@ -112,6 +140,7 @@ When modifying a project, return:
 - The process ownership mechanism.
 - The primary-entry behavior.
 - The metrics source and endpoint, or the reason metrics are unavailable.
+- Local TCP port reservations, application listen configuration, and any consumers updated.
 - Validation commands and their results.
 
 When asked to generate files without applying them, return a unified diff or a file manifest with

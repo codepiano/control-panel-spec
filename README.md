@@ -11,6 +11,8 @@
 Project Tooling 规定了：
 
 - 项目如何通过 `control-panel.json` 声明自己的控制入口
+- 网络服务如何先注册本机 TCP 端口，再同步真实启动配置、访问地址与生命周期脚本
+- 外层项目如何用 `children` 描述子项目路径、角色和归属原因；纯集合使用 `kind: collection`
 - 项目如何用仓库内的相对路径声明跨控制界面复用的图标
 - AI 如何优先复用已有命令，而不是重新发明启动方式
 - `init`、`install`、`start`、`stop`、`status`、`restart`、`uninstall` 的职责边界
@@ -102,7 +104,7 @@ Skill 目录需要直接包含 `SKILL.md`。默认安装位置是 `$CODEX_HOME/s
 ```bash
 SKILLS_DIR="${CODEX_HOME:-$HOME/.codex}/skills"
 mkdir -p "$SKILLS_DIR"
-ln -s "/Users/codepiano/Documents/control-panel-tooling" "$SKILLS_DIR/project-tooling"
+ln -s "/Users/codepiano/git/control-panel-spec" "$SKILLS_DIR/project-tooling"
 ```
 
 目标路径已存在时，先确认它不是正在使用的 Skill，再手动处理冲突，不要覆盖未知目录。
@@ -120,7 +122,7 @@ cp -R /path/to/project-tooling/. "$SKILLS_DIR/project-tooling/"
 如果从私有 GitHub 仓库安装，可以先克隆，再执行上面的复制步骤：
 
 ```bash
-git clone git@github.com:codepiano/project-tooling.git /path/to/project-tooling
+git clone git@github.com:codepiano/control-panel-spec.git /path/to/project-tooling
 ```
 
 安装后，在新的 Codex 任务中使用：
@@ -146,3 +148,26 @@ python3 /Users/codepiano/.codex/skills/.system/skill-creator/scripts/quick_valid
 ## License
 
 本仓库暂未声明开源许可证。在复用、发布或贡献前，请先与维护者确认许可方式。
+
+## 端口注册与协议获取
+
+使用 `$project-tooling 为当前服务注册端口，并按 spec 生成或修复生命周期脚本`。
+Skill 会检查项目已有入口，通过本机面板串行分配并持久化端口，随后生成项目适用的脚本。
+停止的服务仍保留端口分配；真实监听配置与 manifest 地址必须一致。
+
+```bash
+node /path/to/project-tooling/scripts/port-registry.mjs spec
+node /path/to/project-tooling/scripts/port-registry.mjs list
+node /path/to/project-tooling/scripts/port-registry.mjs register --project /absolute/project --count 2
+```
+
+先创建含 `name` 和 `workingDirectory` 的最小 manifest。注册会保留其它字段、写入 `ports`，并将尚未发现的项目加入本机扫描入口。
+已有端口可使用 `--ports 4323,4324` 请求，冲突直接失败。面板地址默认 `http://127.0.0.1:4310`，可通过 `CONTROL_PANEL_URL` 或 `--panel-url` 指定。
+协议获取可离线执行，注册需要支持该 API 的运行中面板。完整流程见 [端口注册](./references/port-registration.md)。
+
+## 项目内的 tunnel 与外部进程
+
+Tunnel 是所属项目的子服务，用父 manifest 的 `children` 声明。
+`scaffold-launchd.py` 为已有 LaunchAgent 生成项目自有的启动、停止、状态和重启脚本，
+无需面板写死服务名，也不依赖运行时安装 Skill。停止使用 bootout，避免 KeepAlive 立即拉起。
+生成命令和验收步骤见 [LaunchAgent 子服务接入](references/launchd-components.md)。
