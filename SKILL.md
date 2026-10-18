@@ -80,6 +80,9 @@ guidance in the spec and generate only the files the target project actually nee
      for existing per-user LaunchAgents. Use `scripts/scaffold-launchd.py` to generate project-owned
      scripts; never start or restart the live job to validate the integration. Confirm recovery
      helpers respect an unloaded job and distinguish process state from local readiness.
+     Confirm bounded readiness and cleanup of only jobs created by this attempt. Preserve existing
+     jobs, report cleanup failures, and budget the consumer deadline for readiness plus cleanup.
+     Stop failures must prevent restart; do not generate version backups or automatic downgrades.
 
    - `start.sh` must start only the project's declared service or application.
    - In `managed` mode, start must be non-blocking, idempotent, and record a PID, process group,

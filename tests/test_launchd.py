@@ -125,6 +125,73 @@ class LaunchdTests(unittest.TestCase):
         result, code = adapter.Service(self.config, run).status()
         self.assertEqual((result['status'], result['readiness'], code), ('running', 'unknown', 0))
 
+    def test_unready_new_job_is_unloaded_but_existing_job_is_preserved(self):
+        self.fake.health = False
+        self.service.start_timeout = .01
+        with patch.object(adapter.time, 'sleep', return_value=None):
+            with self.assertRaisesRegex(RuntimeError, 'pre-existing.*preserved'):
+                self.service.start()
+        self.assertFalse(any(call[1] == 'bootout' for call in self.fake.calls))
+        self.fake.loaded = False
+        self.fake.pid = 0
+        with patch.object(adapter.time, 'sleep', return_value=None):
+            with self.assertRaisesRegex(RuntimeError, 'newly loaded.*unloaded'):
+                self.service.start()
+        self.assertFalse(self.fake.loaded)
+
+    def test_failed_cleanup_is_not_reported_as_successful_rollback(self):
+        self.fake.loaded = False
+        self.fake.pid = 0
+        self.fake.health = False
+        self.service.start_timeout = .01
+        def run(args):
+            if args[1] == 'bootout':
+                return subprocess.CompletedProcess(args, 1, '', 'not permitted')
+            return self.fake(args)
+        self.service.run = run
+        with patch.object(adapter.time, 'sleep', return_value=None):
+            with self.assertRaisesRegex(RuntimeError, 'cleanup failed'):
+                self.service.start()
+        self.assertTrue(self.fake.loaded)
+
+    def test_ambiguous_bootstrap_failure_does_not_unload_unproven_job(self):
+        self.fake.loaded = False
+        self.fake.pid = 0
+        def run(args):
+            result = self.fake(args)
+            if args[1] == 'bootstrap':
+                return subprocess.CompletedProcess(args, 1, '', 'failed after load')
+            return result
+        self.service.run = run
+        with self.assertRaisesRegex(RuntimeError, 'ownership uncertain'):
+            self.service.start()
+        self.assertTrue(self.fake.loaded)
+        self.assertFalse(any(call[1] == 'bootout' for call in self.fake.calls))
+
+    def test_start_rejects_unknown_readiness_and_validates_deadline(self):
+        self.service.readiness = lambda pid: 'unknown'
+        self.service.start_timeout = .01
+        with patch.object(adapter.time, 'sleep', return_value=None):
+            with self.assertRaisesRegex(RuntimeError, 'preserved'):
+                self.service.start()
+        for timeout in (0, 121, True, '30'):
+            with self.assertRaises(ValueError):
+                adapter.Service({**self.config, 'startTimeoutSec': timeout}, self.fake)
+
+    def test_changed_ownership_blocks_cleanup(self):
+        self.fake.loaded = False
+        self.fake.pid = 0
+        self.service.start_timeout = .01
+        def readiness(pid):
+            self.fake.plist = self.root / 'another-owner.plist'
+            return 'unready'
+        self.service.readiness = readiness
+        with patch.object(adapter.time, 'sleep', return_value=None):
+            with self.assertRaisesRegex(RuntimeError, 'ownership changed'):
+                self.service.start()
+        self.assertTrue(self.fake.loaded)
+        self.assertFalse(any(call[1] == 'bootout' for call in self.fake.calls))
+
     def test_generator_preserves_parent_and_refuses_overwrite_or_escape(self):
         manifest = self.root / 'control-panel.json'
         manifest.write_text(json.dumps({'name': 'Parent', 'id': 'parent', 'startCommand': './start.sh',

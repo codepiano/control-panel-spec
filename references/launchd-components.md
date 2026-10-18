@@ -33,3 +33,9 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 Parse both manifests, check wrapper executability and `bash -n`, verify child ownership through
 actual discovery, and run only read-only status against a live job. Do not test lifecycle mutations
 on active tunnels. Process running, local readiness, and remote MCP tool success are separate claims.
+
+Startup confirmation defaults to 30 seconds (`launchd.json` `startTimeoutSec`, 1–120).
+The generated consumer `startTimeoutMs` is 60000; raise it if readiness plus cleanup needs longer.
+Failure unloads only a job newly bootstrapped by this attempt. Pre-existing jobs remain untouched.
+Cleanup errors are explicit and need inspection; failed new jobs do not silently retry forever.
+Restart stops first and has no old-version rollback. No backup binaries or configs are created.

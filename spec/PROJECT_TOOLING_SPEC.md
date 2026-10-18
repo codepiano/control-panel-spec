@@ -1,6 +1,6 @@
 # Project Tooling Spec
 
-Version: `1.9`
+Version: `1.10`
 
 This document is the canonical contract for projects that want a standard control surface and for AIs that generate project lifecycle scripts.
 
@@ -64,6 +64,7 @@ Every controllable project should expose a `control-panel.json` file at the proj
 - `id`: stable identifier
 - `icon`: project-relative path to the icon used by compatible control surfaces
 - `startCommand`: lifecycle start command
+- `startTimeoutMs`: wrapper completion deadline in milliseconds (Control Panel default 60000; accepted 100–300000)
 - `installCommand`: lifecycle install command
 - `initCommand`: lifecycle initialization command
 - `stopCommand`: lifecycle stop command
@@ -300,6 +301,16 @@ For `managed` and `external` modes it must be non-blocking after the process or 
 accepted the start request. It should be idempotent: starting an already-running project should
 not create a second instance.
 
+Start wrappers must exit after bounded startup confirmation. Consumers wait for completion rather
+than treating a surviving launcher as success, then verify the declared status command. Keep
+`starting` until these steps complete. A nonzero exit, timeout, or failed status confirmation is a
+failed operation with its reason retained even if a service process remains running. A timed-out
+launcher is terminated, but generic consumers must not kill inferred service processes or run an
+unconditional stop command to clean up: ownership-aware cleanup belongs to the project adapter.
+The default consumer wrapper deadline is 60 seconds; projects may set `startTimeoutMs` (100–300000)
+when their bounded startup flow needs a different budget. Foreground dev servers need a detaching
+wrapper; they no longer count as successful starts just because the command stays alive.
+
 ### 4.4 Stop
 
 The stop script should stop only the service managed by the project.
@@ -321,7 +332,8 @@ vocabulary used by the metrics contract rather than human-only prose.
 
 ### 4.6 Restart
 
-The restart script should call stop then start.
+The restart script should call stop then start, and must not start if stopping failed.
+Consumers must return stop failures to the caller instead of silently continuing a restart.
 
 ### 4.7 Uninstall
 
@@ -393,6 +405,18 @@ Readiness uses the exact launchd PID's loopback listener and the client's health
 poll checks. Do not copy profile contents, credentials or full health error output into manifests,
 logs or repository files. Keep actual tunnel transport and proxy configuration in the existing
 host profile/LaunchAgent.
+
+For the supplied launchd adapter, start waits for a PID plus local readiness when a probe is
+configured (default 30 seconds; `launchd.json` `startTimeoutSec` from 1 through 120). Without a
+probe it confirms only the process. The consumer deadline must leave room for readiness and
+cleanup (at least startTimeoutSec plus 15 seconds). On failure, only a job with an acknowledged bootstrap by
+this attempt is unloaded. A failed or timed-out bootstrap has uncertain ownership and must report
+that uncertainty instead of unloading a potentially concurrent operator-owned job. A job loaded before the attempt is preserved. Verify exact plist
+ownership again during cleanup; inability to verify or unload is an explicit cleanup failure,
+never a successful rollback. Once unloaded, KeepAlive/recovery cannot retry that failed attempt;
+the next retry is manual. Existing loaded jobs retain their supervisor retry policy.
+Restart is stop then start; if the replacement fails, it stays failed/stopped instead of restoring
+a previous binary, configuration, credentials or process. No version backups are created.
 
 Process state and readiness are separate: a live process returns status exit 0 even when readiness
 is `unready` or `unknown`; text output must state that distinction. Optional `status --json` adds

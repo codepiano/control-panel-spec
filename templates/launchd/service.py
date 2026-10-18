@@ -14,6 +14,9 @@ class Service:
     def __init__(self, config, run=None):
         self.config = config
         self.deadline = time.monotonic() + 6
+        self.start_timeout = config.get('startTimeoutSec', 30)
+        if not isinstance(self.start_timeout, (int, float)) or isinstance(self.start_timeout, bool) or not 1 <= self.start_timeout <= 120:
+            raise ValueError('startTimeoutSec must be between 1 and 120')
         self.label = config['label']
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]+', self.label):
             raise ValueError('Invalid launchd label')
@@ -96,20 +99,46 @@ class Service:
             raise RuntimeError('launchd action failed; inspect this service with launchctl')
 
     def start(self):
-        pid = self.job()
-        if pid:
-            return
-        if pid is None:
-            self.mutate(['bootstrap', self.domain, str(self.plist)])
-        else:
-            self.mutate(['kickstart', self.target])
-        for _ in range(20):
-            if self.job():
-                return
-            time.sleep(.2)
-        raise RuntimeError('launchd accepted start but no running process was confirmed')
+        self.deadline = time.monotonic() + self.start_timeout
+        initial_pid = self.job()
+        created = False
+        try:
+            if initial_pid is None:
+                # Only an acknowledged bootstrap establishes ownership for cleanup.
+                # An ambiguous failure may be a racing operator's job; preserve it.
+                try:
+                    self.mutate(['bootstrap', self.domain, str(self.plist)])
+                except (RuntimeError, OSError, subprocess.TimeoutExpired):
+                    raise RuntimeError('Bootstrap failed or timed out; ownership uncertain; inspect launchd state') from None
+                created = True
+            elif not initial_pid:
+                self.mutate(['kickstart', self.target])
+            while time.monotonic() < self.deadline:
+                pid = self.job()
+                if pid:
+                    try:
+                        ready = not self.config.get('probe') or self.readiness(pid) == 'ready'
+                    except (OSError, subprocess.TimeoutExpired):
+                        ready = False
+                    if ready:
+                        return
+                time.sleep(.2)
+            raise RuntimeError('Startup readiness deadline exceeded')
+        except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired) as error:
+            # Roll back only a job newly loaded by this attempt. Existing jobs remain owned
+            # by their original supervisor policy, even when their readiness cannot be proven.
+            if created:
+                try:
+                    self.stop()
+                except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired):
+                    raise RuntimeError('Startup failed; cleanup failed or ownership changed; inspect launchd state') from None
+                raise RuntimeError('Startup failed; newly loaded launchd job was unloaded') from None
+            if initial_pid is None:
+                raise RuntimeError('Bootstrap failed or timed out; ownership uncertain; inspect launchd state') from None
+            raise RuntimeError('Startup failed; pre-existing launchd job was preserved') from None
 
     def stop(self):
+        self.deadline = time.monotonic() + 6
         if self.job() is None:
             return
         # bootout removes the job, so KeepAlive and kickstart-only recovery cannot revive it.
@@ -134,6 +163,9 @@ def main(argv=None):
             service.start()
         elif args.action != 'status':
             getattr(service, args.action)()
+        if args.action in ('start', 'restart'):
+            print('running · 本地就绪已确认' if config.get('probe') else 'running · 进程已确认')
+            return 0
         if args.action == 'stop':
             print('stopped (launchd job unloaded)')
             return 0

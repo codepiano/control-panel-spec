@@ -43,7 +43,7 @@ def scaffold(project, child, name, label, profile=None):
         (staging / 'launchd.json').write_text(json.dumps(config, indent=2) + '\n')
         manifest = {'id': str(parent.get('id', project.name)) + '-' + destination.name,
                     'name': name, 'workingDirectory': '.', 'surfaceType': 'service',
-                    'runtimeMode': 'packaged', 'processMode': 'external', 'processManager': 'launchd',
+                    'runtimeMode': 'packaged', 'processMode': 'external', 'processManager': 'launchd', 'startTimeoutMs': 60000,
                     'notes': '所属项目的独立子服务；由已有 LaunchAgent 管理。状态区分进程运行与本地就绪，远端 MCP 可用性需实际调用验证。'}
         for action in ('start', 'stop', 'status', 'restart'):
             manifest[action + 'Command'] = './scripts/' + action + '.sh'
@@ -58,7 +58,10 @@ this adapter never creates credentials, tunnel profiles or launchd definitions. 
 configuration fails visibly. Do not commit tunnel profile contents or secrets.
 
 Run `./scripts/{start,stop,status,restart}.sh` from this directory. Status supports `--json`.
-Start reuses a running job or bootstraps the existing plist. Stop uses bootout to unload KeepAlive
+Start confirms readiness within 30 seconds (`launchd.json` startTimeoutSec: 1–120). Failure unloads
+only jobs newly loaded by this attempt; pre-existing jobs are preserved. Cleanup failure is explicit.
+Panel startTimeoutMs must exceed readiness plus cleanup time (default 60 seconds).
+Stop uses bootout to unload KeepAlive
 jobs; restart performs stop then start. It does not change RunAtLoad or future-login behavior.
 Recovery helpers must respect an unloaded target and must never bootstrap a deliberately stopped job.
 
