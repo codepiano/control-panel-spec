@@ -171,3 +171,10 @@ Tunnel 是所属项目的子服务，用父 manifest 的 `children` 声明。
 `scaffold-launchd.py` 为已有 LaunchAgent 生成项目自有的启动、停止、状态和重启脚本，
 无需面板写死服务名，也不依赖运行时安装 Skill。停止使用 bootout，避免 KeepAlive 立即拉起。
 生成命令和验收步骤见 [LaunchAgent 子服务接入](references/launchd-components.md)。
+
+
+## 版本化生命周期（1.11）
+
+可选 `release.protocol: 1` 与 `scripts.version/prepare/activate` 让消费者先隔离准备目标版本，
+成功后停止旧进程、切换不可变产物，再核验实际运行版本。未适配项目保持原有生命周期。
+详细 JSON、失败语义和项目接入验收见 [规范第 10 节](spec/PROJECT_TOOLING_SPEC.md)。

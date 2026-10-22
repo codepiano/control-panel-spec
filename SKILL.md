@@ -110,7 +110,21 @@ guidance in the spec and generate only the files the target project actually nee
    - Keep `openEntry` separate from process supervision. It may focus/open the app and may call an
      idempotent start flow only when the project explicitly defines that behavior.
 
-6. Implement metrics honestly.
+6. Integrate versioned lifecycle when requested.
+
+   - Read section 10 of the spec. Opt in with `release.protocol: 1` only after inspecting the
+     project's build inputs, immutable artifact storage, process ownership and real data paths.
+   - Implement project-owned `scripts.version`, `scripts.prepare`, `scripts.activate`.
+     The reference `templates/release/adapter.py` can be copied with a reviewed project-specific
+     configuration; read `templates/release/README.md` and preserve legacy process authority.
+     Never infer runtime provenance from current HEAD. Unknown existing processes remain unknown.
+   - Preparation must be isolated from live watchers, dependencies, output and user data. It
+     must succeed before stopping the old runtime. Source-only services still need a snapshot.
+   - Verify actual runtime revision, failures and concurrency with temporary isolated services.
+     Do not activate the live project merely to validate integration. Keep independent children
+     unchanged. Never advertise placeholders as completed project support.
+
+7. Implement metrics honestly.
 
    - Prefer `GET /control-panel/metrics` from the project backend or runtime adapter.
    - Return JSON with at least `status` and `updatedAt`.
@@ -121,7 +135,7 @@ guidance in the spec and generate only the files the target project actually nee
      endpoint is expected.
    - For `observed` mode, return `unknown` when the process cannot be verified.
 
-7. Validate before handing off.
+8. Validate before handing off.
 
    - Parse every parent and child `control-panel.json` as JSON.
    - Validate every child path as a strict descendant of its declaring directory, including

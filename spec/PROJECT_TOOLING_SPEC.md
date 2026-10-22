@@ -1,6 +1,6 @@
 # Project Tooling Spec
 
-Version: `1.10`
+Version: `1.11`
 
 This document is the canonical contract for projects that want a standard control surface and for AIs that generate project lifecycle scripts.
 
@@ -24,7 +24,7 @@ This spec does not cover:
 - Deployment orchestration
 - Remote cluster management
 - UI implementation details
-- Build or release pipelines
+- General-purpose build or release pipelines (the optional local versioned lifecycle below is in scope)
 
 ## 2. Skill Package Layout
 
@@ -614,3 +614,115 @@ A project is ready when:
 - Metrics are available through the standard endpoint when needed
 - Metrics come from the project itself instead of being inferred from host process state
 - The manifest is stable enough for another AI to reproduce the setup
+
+
+## 10. Optional versioned lifecycle (release protocol 1)
+
+A project opts in explicitly; older projects retain the lifecycle in section 4. Consumers must
+not guess a build command from package scripts. Collections cannot opt in. Independently exposed
+children, including tunnels, are never implicitly stopped or activated with their parent.
+
+```json
+{
+  "release": { "protocol": 1, "prepareTimeoutMs": 1800000, "activateTimeoutMs": 60000 },
+  "stopCommand": "./scripts/stop.sh",
+  "statusCommand": "./scripts/status.sh",
+  "scripts": {
+    "version": "./scripts/version.sh",
+    "prepare": "./scripts/prepare.sh",
+    "activate": "./scripts/activate.sh"
+  }
+}
+```
+
+All three script keys and authoritative stop/status commands are required. Timeouts are integer
+milliseconds, 100–3600000; defaults are shown above. The version query deadline is 8 seconds.
+Commands must exit, write exactly one JSON object to stdout, and put diagnostic logs on stderr.
+Each output stream is limited to 256 KiB. Revision IDs are 1–256 ASCII characters matching
+`[a-zA-Z0-9][a-zA-Z0-9._:+-]*`. IDs are opaque equality tokens, not ordered semantic versions.
+
+### 10.1 Version query
+
+`scripts.version` is read-only and safe to run against an active service. It returns all fields:
+
+```json
+{"sourceRevision":"sha256:abc123","builtRevision":null,"runningRevision":null}
+```
+
+- `sourceRevision` fingerprints current declared build inputs: relevant source files (including
+  uncommitted changes), dependency lockfiles and build configuration. File identities, content,
+  executable modes, deletions and relevant symlink targets must be covered. Environment/toolchain
+  inputs that change output must be declared and included. Exclude credentials, runtime/user data,
+  build outputs, caches and installed dependencies. A Git commit alone is not a source fingerprint.
+  Git commit may be exposed separately as diagnostic metadata. In a monorepo include the runtime's
+  transitive shared build inputs; do not mistake organizational children for build dependencies.
+- `builtRevision` identifies an existing complete, validated prepared artifact. Return `null` for
+  missing, corrupt or unknown artifacts. A stamp without verified artifacts is insufficient.
+- `runningRevision` comes from the actual process, fixed at startup, or from a startup record bound
+  to an authoritative process identity (including PID reuse protection). Never derive it from the
+  current worktree, a mutable current symlink, or a stamp written before process confirmation.
+  A stopped or pre-integration process with unknown provenance reports `null`.
+
+Consumers show unknown provenance honestly. A live matching running revision is current; a different
+built revision requires preparation, and matching built inputs with old runtime require switching.
+Source-only services use an immutable source snapshot as the prepared artifact; compilation is optional.
+
+### 10.2 Prepare
+
+The consumer sets `PROJECT_TARGET_REVISION` to the version captured by its initial query.
+`scripts.prepare` captures and verifies an immutable input snapshot for that exact revision,
+installs dependencies and builds only in isolated directories. Dependencies, build output, cache,
+configuration and temporary data must not link writes back into the live workspace. Preparation
+must not trigger watchers, refresh pages, stop processes, activate a release, migrate live data,
+or overwrite files currently served by the old process. Reuse an artifact only after checking its
+revision and integrity. Write metadata atomically only after complete success. Return:
+
+```json
+{"builtRevision":"sha256:abc123","artifactId":"project-owned-opaque-id"}
+```
+
+Artifact IDs are nonempty strings up to 4096 characters with no ASCII control characters. They
+are passed through environment variables, never interpolated into shell commands. They identify
+immutable project-owned artifacts, not arbitrary user-controlled filesystem paths. Adapters must
+validate ownership, integrity and revision again before activation. If source inputs change during
+capture, fail or retry the snapshot; never label mixed input as the requested version. This flow
+needs separate timeout and operation locking from ordinary startup.
+
+### 10.3 Activate and verify
+
+Only after successful preparation and a second matching source query, stop the old runtime using
+its authoritative handle. Stop failures prevent activation. The consumer sets both
+`PROJECT_TARGET_REVISION` and `PROJECT_ARTIFACT_ID`; `scripts.activate` validates and switches only
+to that artifact, starts it in the background, and returns after bounded confirmation:
+
+```json
+{"runningRevision":"sha256:abc123"}
+```
+
+Check project status/health, then query version again. Success requires the actual running revision
+to equal the captured target. An HTTP 200 or live PID alone cannot prove version delivery. Lock
+check, prepare, stop, activate and verification as one per-runtime operation so ordinary starts/stops
+cannot interleave. A failed prepare leaves the old runtime untouched. An activation/verification
+failure remains a visible failure, with actual current runtime state reported separately; no implicit
+old-version restore, broad process cleanup or child restart is allowed. No version backups are
+required by this protocol. Projects own artifact storage and explicit retention policies.
+
+Code fetch/pull is separate from activation. It may refresh version status, but never implies
+permission to restart a service. Explicit start/restart applies the current target automatically
+for opted-in projects. Idempotent start of an already-running service remains a no-op; use restart
+to apply updates. Ordinary stop does not prepare or build. External supervisors and desktop apps
+implement the same interface using their own handles and release selection. The Control Panel preserves its safety-checked self-restart preflight and runs the same version-aware
+restart through a detached helper, so the old backend survives preparation.
+
+### 10.4 Adoption acceptance
+
+Before opting in a project, verify in an independent checkout with temporary data and loopback
+ports: first build, artifact reuse, dirty-source fingerprint changes, dependencies/config changes,
+corrupt artifact rejection, build failure with old runtime preserved, moving-source rejection,
+stop failure blocking activation, parallel action rejection, runtime mismatch detection and actual
+successful version readback. Inspect desktop visuals only when UI changes require it. Record
+unverified live delivery separately. Do not populate protocol keys with placeholder scripts.
+
+A reference project-owned adapter and its configuration semantics are documented in
+`templates/release/README.md`. Consumers implement the portable command/JSON interface, not its
+private on-disk store layout. Real build and activation recipes require per-project inspection.
